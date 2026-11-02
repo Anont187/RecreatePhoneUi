@@ -1,0 +1,14 @@
+# Target labels
+ freetype-populate
+# Source files and their labels
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/CMakeFiles/freetype-populate
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/CMakeFiles/freetype-populate.rule
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/CMakeFiles/freetype-populate-complete.rule
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/freetype-populate-prefix/src/freetype-populate-stamp/freetype-populate-build.rule
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/freetype-populate-prefix/src/freetype-populate-stamp/freetype-populate-configure.rule
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/freetype-populate-prefix/src/freetype-populate-stamp/freetype-populate-download.rule
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/freetype-populate-prefix/src/freetype-populate-stamp/freetype-populate-install.rule
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/freetype-populate-prefix/src/freetype-populate-stamp/freetype-populate-mkdir.rule
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/freetype-populate-prefix/src/freetype-populate-stamp/freetype-populate-patch.rule
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/freetype-populate-prefix/src/freetype-populate-stamp/freetype-populate-test.rule
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/freetype-populate-prefix/src/freetype-populate-stamp/freetype-populate-update.rule

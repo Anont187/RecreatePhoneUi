@@ -1,0 +1,3 @@
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/CMakeFiles/freetype-populate.dir
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/CMakeFiles/edit_cache.dir
+/workspaces/RecreatePhoneUi/build-fetch/_deps/freetype-subbuild/CMakeFiles/rebuild_cache.dir

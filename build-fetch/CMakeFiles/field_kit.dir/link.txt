@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -flto=auto -fno-fat-lto-objects -Wl,--gc-sections CMakeFiles/field_kit.dir/main.cpp.o CMakeFiles/field_kit.dir/glad.c.o -o field_kit  _deps/glfw-build/src/libglfw3.a -ldl /usr/lib/x86_64-linux-gnu/librt.a -lm -ldl _deps/freetype-build/libfreetype.a /usr/lib/x86_64-linux-gnu/libbrotlidec.so 

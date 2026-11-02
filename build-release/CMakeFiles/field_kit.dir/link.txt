@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -flto=auto -fno-fat-lto-objects -Wl,--gc-sections CMakeFiles/field_kit.dir/main.cpp.o CMakeFiles/field_kit.dir/glad.c.o -o field_kit  /usr/lib/x86_64-linux-gnu/libglfw.so.3.3 /usr/lib/x86_64-linux-gnu/libfreetype.so -ldl 

@@ -1,0 +1,4 @@
+/workspaces/RecreatePhoneUi/build-fetch/CMakeFiles/_CMakeLTOTest-C/bin/CMakeFiles/foo.dir
+/workspaces/RecreatePhoneUi/build-fetch/CMakeFiles/_CMakeLTOTest-C/bin/CMakeFiles/boo.dir
+/workspaces/RecreatePhoneUi/build-fetch/CMakeFiles/_CMakeLTOTest-C/bin/CMakeFiles/edit_cache.dir
+/workspaces/RecreatePhoneUi/build-fetch/CMakeFiles/_CMakeLTOTest-C/bin/CMakeFiles/rebuild_cache.dir
