@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
@@ -95,6 +96,19 @@ glm::vec4 rgba(Rgb value, float alpha = 1.0f) {
 
 float clamp(float value, float low, float high) {
     return std::max(low, std::min(value, high));
+}
+
+float easeOutCubic(float t) {
+    t = clamp(t, 0.0f, 1.0f);
+    return 1.0f - std::pow(1.0f - t, 3.0f);
+}
+
+float easeInOutCubic(float t) {
+    t = clamp(t, 0.0f, 1.0f);
+    if (t < 0.5f) {
+        return 4.0f * t * t * t;
+    }
+    return 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f;
 }
 
 bool contains(const Rect& rect, float x, float y) {
@@ -304,6 +318,44 @@ struct Glyph {
     int advance = 0;
 };
 
+std::string resolveFontPath() {
+    const char* envCandidates[] = {"FIELDKIT_FONT_PATH", "FONT_PATH", nullptr};
+    for (const char* envName : envCandidates) {
+        if (envName == nullptr) {
+            break;
+        }
+        if (const char* envValue = std::getenv(envName); envValue != nullptr && envValue[0] != '\0') {
+            if (std::filesystem::exists(envValue)) {
+                return envValue;
+            }
+        }
+    }
+
+    const std::array<std::string, 13> candidates{
+        "/System/Library/Fonts/SFProDisplay-Regular.otf",
+        "/System/Library/Fonts/SFProDisplay-Medium.otf",
+        "/System/Library/Fonts/SFProText-Regular.otf",
+        "/System/Library/Fonts/SFProText-Medium.otf",
+        "/Library/Fonts/SF Pro Display Regular.otf",
+        "/Library/Fonts/SF Pro Display Medium.otf",
+        "/usr/share/fonts/truetype/quicksand/Quicksand-Medium.ttf",
+        "/usr/share/fonts/truetype/quicksand/Quicksand-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+        "/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    };
+
+    for (const auto& candidate : candidates) {
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+    }
+
+    return {};
+}
+
 class FontAtlas {
 public:
     FontAtlas() {
@@ -311,16 +363,10 @@ public:
             throw std::runtime_error("Could not initialize FreeType");
         }
 
-        const std::array<const char*, 2> paths{
-            "/usr/share/fonts/truetype/quicksand/Quicksand-Medium.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        };
-        const auto fontPath = std::find_if(paths.begin(), paths.end(), [](const char* path) {
-            return std::filesystem::exists(path);
-        });
-        if (fontPath == paths.end() || FT_New_Face(library_, *fontPath, 0, &face_) != 0) {
+        const std::string fontPath = resolveFontPath();
+        if (fontPath.empty() || FT_New_Face(library_, fontPath.c_str(), 0, &face_) != 0) {
             FT_Done_FreeType(library_);
-            throw std::runtime_error("No supported font was found under /usr/share/fonts");
+            throw std::runtime_error("No supported font was found under /usr/share/fonts or the configured FIELDKIT_FONT_PATH");
         }
 
         constexpr int pixelSize = 48;
@@ -576,10 +622,11 @@ void drawIcon(Drawer& drawer, const App& app, std::size_t index, const Rect& rec
 }
 
 void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float width, float height, int selectedIndex, float openProgress, float introTime) {
-    const glm::vec4 white = rgba(0.93f, 0.94f, 0.92f);
-    const glm::vec4 muted = rgba(0.62f, 0.64f, 0.64f);
+    const glm::vec4 white = rgba(0.95f, 0.95f, 0.97f, 1.0f);
+    const glm::vec4 muted = rgba(0.65f, 0.67f, 0.70f, 1.0f);
+    const glm::vec4 systemBlue = rgba(0.0f, 0.48f, 1.0f, 1.0f);
     const float scale = layout.scale;
-    const float homeAlpha = 1.0f - clamp(openProgress * 1.35f, 0.0f, 1.0f);
+    const float homeAlpha = 1.0f - easeInOutCubic(clamp(openProgress, 0.0f, 1.0f));
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -590,11 +637,10 @@ void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float
         const float barHeight = (5.0f + bar * 2.2f) * scale;
         drawer.roundedRect({statusRight - 59.0f * scale + bar * 5.0f * scale, height * 0.045f - barHeight, 3.0f * scale, barHeight}, rgba(muted.r, muted.g, muted.b, homeAlpha), 1.5f * scale);
     }
-    drawer.roundedRect({statusRight - 33.0f * scale, height * 0.024f, 20.0f * scale, 10.0f * scale}, rgba(0.16f, 0.18f, 0.18f, homeAlpha), 4.0f * scale);
-    drawer.roundedRect({statusRight - 31.0f * scale, height * 0.024f + 2.0f * scale, 14.0f * scale, 6.0f * scale}, rgba(0.77f, 0.84f, 0.65f, homeAlpha), 3.0f * scale);
+    drawer.roundedRect({statusRight - 33.0f * scale, height * 0.024f, 20.0f * scale, 10.0f * scale}, rgba(0.11f, 0.11f, 0.12f, homeAlpha), 4.0f * scale);
+    drawer.roundedRect({statusRight - 31.0f * scale, height * 0.024f + 2.0f * scale, 14.0f * scale, 6.0f * scale}, rgba(0.46f, 0.90f, 0.42f, homeAlpha), 3.0f * scale);
     drawer.roundedRect({statusRight - 12.0f * scale, height * 0.027f, 2.0f * scale, 4.0f * scale}, rgba(muted.r, muted.g, muted.b, homeAlpha), 1.0f * scale);
 
-    const float gridOffset = -openProgress * 14.0f * scale;
     for (std::size_t index = 0; index < layout.cells.size(); ++index) {
         const AppCell& cell = layout.cells[index];
         const int row = static_cast<int>(index / 4);
@@ -602,23 +648,23 @@ void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float
         const float delay = row * 0.028f + (column % 2) * 0.014f;
         const float entrance = clamp((introTime - delay) / 0.38f, 0.0f, 1.0f);
         const float easedEntrance = 1.0f - std::pow(1.0f - entrance, 3.0f);
-        const float iconScale = (0.78f + 0.22f * easedEntrance) * (1.0f - 0.045f * openProgress);
+        const float iconScale = (0.78f + 0.22f * easedEntrance) * (1.0f - 0.08f * openProgress);
         const float iconWidth = cell.icon.width * iconScale;
         const float iconHeight = cell.icon.height * iconScale;
         const Rect iconRect{
             cell.icon.x + (cell.icon.width - iconWidth) * 0.5f,
-            cell.icon.y + (cell.icon.height - iconHeight) * 0.5f + gridOffset,
+            cell.icon.y + (cell.icon.height - iconHeight) * 0.5f,
             iconWidth,
             iconHeight,
         };
         const float alpha = easedEntrance * homeAlpha;
         drawIcon(drawer, Apps[index], index, iconRect, alpha);
         const float labelSize = clamp(layout.rowHeight * 0.145f * scale, 8.0f, 13.0f);
-        const glm::vec4 labelColor = static_cast<int>(index) == selectedIndex ? rgba(0.88f, 0.90f, 0.84f, alpha) : rgba(0.68f, 0.70f, 0.70f, alpha);
-        font.draw(drawer, Apps[index].name, cell.bounds.x + cell.bounds.width * 0.5f, cell.icon.y + cell.icon.height + 5.0f * scale + gridOffset, labelSize, labelColor, true);
+        const glm::vec4 labelColor = static_cast<int>(index) == selectedIndex ? rgba(0.95f, 0.96f, 0.98f, alpha) : rgba(0.70f, 0.72f, 0.76f, alpha);
+        font.draw(drawer, Apps[index].name, cell.bounds.x + cell.bounds.width * 0.5f, cell.icon.y + cell.icon.height + 5.0f * scale, labelSize, labelColor, true);
     }
 
-    const float pageY = layout.dock.y - std::max(14.0f, height * 0.035f) + openProgress * 16.0f * scale;
+    const float pageY = layout.dock.y - std::max(14.0f, height * 0.035f);
     for (int page = 0; page < 3; ++page) {
         const float centerX = width * 0.5f + (page - 1) * 12.0f * scale;
         const float dotWidth = page == 0 ? 13.0f * scale : 4.0f * scale;
@@ -627,10 +673,11 @@ void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float
     }
 
     const float dockEntrance = clamp(introTime / 0.48f, 0.0f, 1.0f);
-    const float dockAlpha = (1.0f - openProgress) * dockEntrance;
+    const float dockAlpha = homeAlpha * dockEntrance;
     Rect dock = layout.dock;
-    dock.y += (1.0f - dockEntrance) * 22.0f * scale + openProgress * 28.0f * scale;
-    drawer.roundedRect(dock, rgba(0.14f, 0.15f, 0.16f, 0.78f * dockAlpha), dock.height * 0.30f);
+    dock.y += (1.0f - dockEntrance) * 18.0f * scale;
+    drawer.roundedRect(dock, rgba(0.95f, 0.97f, 1.0f, 0.62f * dockAlpha), dock.height * 0.30f);
+    drawer.roundedRect({dock.x + 1.0f * scale, dock.y + 1.0f * scale, dock.width - 2.0f * scale, dock.height * 0.24f}, rgba(1.0f, 1.0f, 1.0f, 0.28f * dockAlpha), dock.height * 0.30f);
     for (std::size_t index = 0; index < layout.dockIcons.size(); ++index) {
         const std::size_t appIndex = DockApps[index];
         const Rect& source = layout.dockIcons[index];
@@ -652,32 +699,41 @@ void drawAppSurface(Drawer& drawer, const FontAtlas& font, const Rect& surface, 
     const float scale = clamp(std::min(surface.width / 480.0f, surface.height / 760.0f), 0.55f, 1.7f);
     const float shortSide = std::min(surface.width, surface.height);
     const float margin = std::max(18.0f, shortSide * 0.055f);
-    const float radius = 14.0f + shortSide * 0.035f * progress;
-    const float contentAlpha = clamp((progress - 0.48f) / 0.52f, 0.0f, 1.0f);
+    const float appEase = clamp(progress, 0.0f, 1.0f);
+    const float radius = 14.0f + shortSide * 0.035f * appEase;
+    const float contentAlpha = easeInOutCubic(clamp((progress - 0.58f) / 0.42f, 0.0f, 1.0f));
+    const glm::vec4 appBackground = glm::mix(rgba(app.accent), rgba(0.96f, 0.98f, 1.0f), appEase);
 
     drawer.roundedRect({surface.x + 3.0f, surface.y + 7.0f, surface.width, surface.height}, rgba(0.0f, 0.0f, 0.0f, 0.28f * progress), radius + 3.0f);
-    drawer.roundedRect(surface, rgba(0.045f, 0.052f, 0.056f), radius);
+    drawer.roundedRect(surface, appBackground, radius);
+    drawer.roundedRect({surface.x + 1.0f * scale, surface.y + 1.0f * scale, surface.width - 2.0f * scale, surface.height * 0.12f}, rgba(1.0f, 1.0f, 1.0f, 0.30f * contentAlpha), radius);
+    const float iconMorphAlpha = 1.0f - easeInOutCubic(clamp(progress / 0.58f, 0.0f, 1.0f));
+    if (iconMorphAlpha > 0.0f) {
+        drawIcon(drawer, app, index, surface, iconMorphAlpha);
+    }
     if (contentAlpha <= 0.0f) {
         return;
     }
 
-    const glm::vec4 white = rgba(0.94f, 0.95f, 0.92f, contentAlpha);
-    const glm::vec4 muted = rgba(0.55f, 0.59f, 0.58f, contentAlpha);
+    const glm::vec4 white = rgba(0.11f, 0.12f, 0.12f, contentAlpha);
+    const glm::vec4 muted = rgba(0.42f, 0.45f, 0.50f, contentAlpha);
     const glm::vec4 accent = rgba(app.accent, contentAlpha);
+    const glm::vec4 iosBlue = rgba(0.0f, 0.48f, 1.0f, contentAlpha);
     const float titleSize = clamp(shortSide * 0.083f, 30.0f, 68.0f) * scale;
     const Rect closeRect = closeButtonRect(surface);
 
     font.draw(drawer, "FIELD KIT   /   TOOL", surface.x + margin, surface.y + margin, 11.0f * scale, muted);
-    drawer.roundedRect(closeRect, rgba(0.12f, 0.14f, 0.15f, contentAlpha), 13.0f * scale);
+    drawer.roundedRect(closeRect, rgba(0.90f, 0.90f, 0.92f, contentAlpha), 13.0f * scale);
     font.draw(drawer, "BACK", closeRect.x + closeRect.width * 0.5f, closeRect.y + 8.0f * scale, 10.0f * scale, white, true);
 
     font.draw(drawer, app.name, surface.x + margin, surface.y + surface.height * 0.16f, titleSize, white);
     font.draw(drawer, app.description, surface.x + margin + 2.0f * scale, surface.y + surface.height * 0.24f, 12.0f * scale, muted);
 
-    const float panelY = surface.y + surface.height * 0.34f;
+    const float panelY = surface.y + surface.height * 0.34f - (1.0f - appEase) * 14.0f * scale;
     const float panelHeight = surface.height * 0.28f;
     const Rect panel{surface.x + margin, panelY, surface.width - 2.0f * margin, panelHeight};
-    drawer.roundedRect(panel, rgba(0.085f, 0.10f, 0.10f, contentAlpha), 18.0f * scale);
+    drawer.roundedRect(panel, rgba(0.90f, 0.93f, 0.98f, 0.42f * contentAlpha), 18.0f * scale);
+    drawer.roundedRect({panel.x + 1.0f * scale, panel.y + 1.0f * scale, panel.width - 2.0f * scale, panel.height * 0.12f}, rgba(1.0f, 1.0f, 1.0f, 0.22f * contentAlpha), 18.0f * scale);
     font.draw(drawer, "LIVE STUDY", panel.x + 18.0f * scale, panel.y + 15.0f * scale, 10.0f * scale, muted);
 
     constexpr int barCount = 28;
@@ -693,7 +749,7 @@ void drawAppSurface(Drawer& drawer, const FontAtlas& font, const Rect& surface, 
     }
 
     font.draw(drawer, "SESSION", surface.x + margin, surface.y + surface.height * 0.70f, 10.0f * scale, muted);
-    font.draw(drawer, "0" + std::to_string(index + 1), surface.x + margin, surface.y + surface.height * 0.735f, 38.0f * scale, accent);
+    font.draw(drawer, "0" + std::to_string(index + 1), surface.x + margin, surface.y + surface.height * 0.735f, 38.0f * scale, iosBlue);
     font.draw(drawer, "A PLACE TO PICK UP WHERE YOU LEFT OFF.", surface.x + margin, surface.y + surface.height * 0.84f, 10.0f * scale, muted);
     drawer.roundedRect({surface.x + margin, surface.y + surface.height * 0.89f, surface.width - 2.0f * margin, 1.0f * scale}, rgba(0.22f, 0.24f, 0.23f, contentAlpha), 0.0f);
     font.draw(drawer, "FIELD NOTES  /  PRIVATE COLLECTION", surface.x + margin, surface.y + surface.height * 0.92f, 9.0f * scale, muted);
@@ -744,6 +800,7 @@ int main() {
             Drawer drawer;
             FontAtlas font;
             int selectedIndex = 0;
+            int selectedDockSlot = -1;
             float progress = 0.0f;
             float velocity = 0.0f;
             float target = 0.0f;
@@ -795,6 +852,7 @@ int main() {
                         for (std::size_t index = 0; index < layout.cells.size(); ++index) {
                             if (contains(layout.cells[index].bounds, static_cast<float>(cursorX), static_cast<float>(cursorY))) {
                                 selectedIndex = static_cast<int>(index);
+                                selectedDockSlot = -1;
                                 target = 1.0f;
                                 break;
                             }
@@ -803,6 +861,7 @@ int main() {
                             const float slotWidth = layout.dock.width / 4.0f;
                             const int slot = std::clamp(static_cast<int>((cursorX - layout.dock.x) / slotWidth), 0, 3);
                             selectedIndex = static_cast<int>(DockApps[static_cast<std::size_t>(slot)]);
+                            selectedDockSlot = slot;
                             target = 1.0f;
                         }
                     }
@@ -819,22 +878,32 @@ int main() {
                 wasEnterDown = enterDown;
                 wasSpaceDown = spaceDown;
 
-                const float acceleration = (target - progress) * 230.0f - velocity * 29.0f;
-                velocity += acceleration * deltaTime;
-                progress = clamp(progress + velocity * deltaTime, 0.0f, 1.04f);
+                float remainingTime = deltaTime;
+                while (remainingTime > 0.0f) {
+                    const float step = std::min(remainingTime, 1.0f / 120.0f);
+                    const float acceleration = (target - progress) * 230.0f - velocity * 29.0f;
+                    velocity += acceleration * step;
+                    progress = clamp(progress + velocity * step, 0.0f, 1.04f);
+                    remainingTime -= step;
+                }
                 if (std::abs(target - progress) < 0.001f && std::abs(velocity) < 0.02f) {
                     progress = target;
                     velocity = 0.0f;
                 }
 
+                const float appProgress = clamp(progress, 0.0f, 1.0f);
+                const float backgroundDim = easeInOutCubic(appProgress);
+
                 glViewport(0, 0, framebufferWidth, framebufferHeight);
                 drawer.setProjection(width, height);
-                drawHome(drawer, font, layout, width, height, selectedIndex, progress, introTime);
+                drawHome(drawer, font, layout, width, height, selectedIndex, appProgress, introTime);
 
                 if (progress > 0.001f) {
-                    drawer.roundedRect({0.0f, 0.0f, width, height}, rgba(0.0f, 0.0f, 0.0f, 0.78f * clamp(progress, 0.0f, 1.0f)), 0.0f);
-                    const Rect source = layout.cells[static_cast<std::size_t>(selectedIndex)].icon;
-                    const float amount = clamp(progress, 0.0f, 1.0f);
+                    drawer.roundedRect({0.0f, 0.0f, width, height}, rgba(0.0f, 0.0f, 0.0f, 0.78f * backgroundDim), 0.0f);
+                    const Rect source = selectedDockSlot >= 0
+                        ? layout.dockIcons[static_cast<std::size_t>(selectedDockSlot)]
+                        : layout.cells[static_cast<std::size_t>(selectedIndex)].icon;
+                    const float amount = appProgress;
                     const Rect surface{
                         source.x * (1.0f - amount),
                         source.y * (1.0f - amount),
