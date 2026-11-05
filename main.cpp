@@ -147,8 +147,13 @@ struct Spring1D {
 };
 
 struct TileAnimationState {
-    Spring1D scaleSpring{350.0f, 26.0f, 1.0f};
+    Spring1D scaleSpring{380.0f, 24.0f, 1.0f};
     Spring1D alphaSpring{200.0f, 20.0f, 1.0f};
+};
+
+struct RepelTileState {
+    Spring1D scaleSpring{240.0f, 28.0f, 1.0f};
+    Spring1D alphaSpring{180.0f, 20.0f, 1.0f};
 };
 
 bool contains(const Rect& rect, float x, float y) {
@@ -681,7 +686,30 @@ void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float
     drawer.roundedRect({statusRight - 31.0f * scale, height * 0.024f + 2.0f * scale, 14.0f * scale, 6.0f * scale}, rgba(0.46f, 0.90f, 0.42f, homeAlpha), 3.0f * scale);
     drawer.roundedRect({statusRight - 12.0f * scale, height * 0.027f, 2.0f * scale, 4.0f * scale}, rgba(muted.r, muted.g, muted.b, homeAlpha), 1.0f * scale);
 
+    std::vector<std::size_t> drawOrder;
+    drawOrder.reserve(layout.cells.size());
     for (std::size_t index = 0; index < layout.cells.size(); ++index) {
+        drawOrder.push_back(index);
+    }
+    std::stable_sort(drawOrder.begin(), drawOrder.end(), [&](std::size_t lhs, std::size_t rhs) {
+        const int lhsRow = static_cast<int>(lhs / 4);
+        const int lhsCol = static_cast<int>(lhs % 4);
+        const int rhsRow = static_cast<int>(rhs / 4);
+        const int rhsCol = static_cast<int>(rhs % 4);
+        const float lhsDistance = std::hypot(static_cast<float>(lhsCol - (selectedIndex % 4)), static_cast<float>(lhsRow - (selectedIndex / 4)));
+        const float rhsDistance = std::hypot(static_cast<float>(rhsCol - (selectedIndex % 4)), static_cast<float>(rhsRow - (selectedIndex / 4)));
+        if (lhs == static_cast<std::size_t>(selectedIndex)) {
+            return false;
+        }
+        if (rhs == static_cast<std::size_t>(selectedIndex)) {
+            return true;
+        }
+        const float lhsDepth = lhsDistance + tileAnimations[lhs].scaleSpring.currentValue * 0.15f;
+        const float rhsDepth = rhsDistance + tileAnimations[rhs].scaleSpring.currentValue * 0.15f;
+        return lhsDepth < rhsDepth;
+    });
+
+    for (const std::size_t index : drawOrder) {
         const AppCell& cell = layout.cells[index];
         const int row = static_cast<int>(index / 4);
         const int column = static_cast<int>(index % 4);
@@ -807,7 +835,19 @@ void drawAppSurface(Drawer& drawer, const FontAtlas& font, const Rect& surface, 
 }
 
 void framebufferSizeCallback(GLFWwindow*, int width, int height) {
-    glViewport(0, 0, width, height);
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    const float targetAspect = 480.0f / 760.0f;
+    const float currentAspect = static_cast<float>(width) / static_cast<float>(height);
+    const float fitScale = std::min(1.0f, std::min(static_cast<float>(width) / 480.0f, static_cast<float>(height) / 760.0f));
+    const int validWidth = std::max(1, static_cast<int>(std::round(480.0f * fitScale)));
+    const int validHeight = std::max(1, static_cast<int>(std::round(760.0f * fitScale)));
+    const int offsetX = std::max(0, (width - validWidth) / 2);
+    const int offsetY = std::max(0, (height - validHeight) / 2);
+    glViewport(offsetX, offsetY, validWidth, validHeight);
+    (void)targetAspect;
+    (void)currentAspect;
 }
 
 } // namespace
@@ -861,6 +901,8 @@ int main() {
             bool wasSpaceDown = false;
             Spring1D appSpring{};
             std::array<TileAnimationState, 24> tileAnimations{};
+            double lastCursorX = 0.0;
+            double lastCursorY = 0.0;
             double previousTime = glfwGetTime();
 
             while (glfwWindowShouldClose(window) == GLFW_FALSE) {
@@ -890,6 +932,11 @@ int main() {
                 cursorX *= cursorScaleX;
                 cursorY *= cursorScaleY;
 
+                const double cursorDx = cursorX - lastCursorX;
+                const double cursorDy = cursorY - lastCursorY;
+                lastCursorX = cursorX;
+                lastCursorY = cursorY;
+
                 const Layout layout = makeLayout(width, height);
                 const bool mouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
                 const bool clicked = mouseDown && !wasMouseDown;
@@ -905,6 +952,10 @@ int main() {
                             if (contains(layout.cells[index].bounds, static_cast<float>(cursorX), static_cast<float>(cursorY))) {
                                 selectedIndex = static_cast<int>(index);
                                 selectedDockSlot = -1;
+                                const float touchVelocity = static_cast<float>(cursorDx * 0.35f + cursorDy * 0.35f);
+                                if (std::abs(touchVelocity) > 0.0f) {
+                                    tileAnimations[index].scaleSpring.applyTouchFlick(touchVelocity);
+                                }
                                 target = 1.0f;
                                 break;
                             }
@@ -914,6 +965,10 @@ int main() {
                             const int slot = std::clamp(static_cast<int>((cursorX - layout.dock.x) / slotWidth), 0, 3);
                             selectedIndex = static_cast<int>(DockApps[static_cast<std::size_t>(slot)]);
                             selectedDockSlot = slot;
+                            const float touchVelocity = static_cast<float>(cursorDx * 0.35f + cursorDy * 0.35f);
+                            if (std::abs(touchVelocity) > 0.0f) {
+                                tileAnimations[static_cast<std::size_t>(selectedIndex)].scaleSpring.applyTouchFlick(touchVelocity);
+                            }
                             target = 1.0f;
                         }
                     }
@@ -932,20 +987,26 @@ int main() {
 
                 const int selectedCol = selectedIndex % 4;
                 const int selectedRow = selectedIndex / 4;
+                const float sigma = 2.5f;
                 for (std::size_t index = 0; index < tileAnimations.size(); ++index) {
                     const int row = static_cast<int>(index / 4);
                     const int col = static_cast<int>(index % 4);
                     const float dx = static_cast<float>(col - selectedCol);
                     const float dy = static_cast<float>(row - selectedRow);
-                    const float distance = std::sqrt(dx * dx + dy * dy) + 0.5f;
-                    const float repel = target > 0.5f ? std::max(0.0f, 1.6f - distance) : 0.0f;
+                    const float distance = std::sqrt(dx * dx + dy * dy);
+                    const float gaussianFalloff = std::exp(-(distance * distance) / (2.0f * sigma * sigma));
+                    const float repel = target > 0.5f ? gaussianFalloff : 0.0f;
                     float scaleTarget = 1.0f;
                     float alphaTarget = 1.0f;
                     if (static_cast<int>(index) == selectedIndex && target > 0.5f) {
+                        tileAnimations[index].scaleSpring.stiffness = 380.0f;
+                        tileAnimations[index].scaleSpring.damping = 24.0f;
                         scaleTarget = 1.20f;
                         alphaTarget = 1.0f;
                     } else if (target > 0.5f) {
-                        scaleTarget = 1.0f + 0.12f * repel * (1.0f - std::min(1.0f, std::max(0.0f, progress)));
+                        tileAnimations[index].scaleSpring.stiffness = 240.0f;
+                        tileAnimations[index].scaleSpring.damping = 28.0f;
+                        scaleTarget = 1.0f + 0.13f * repel * (1.0f - std::min(1.0f, std::max(0.0f, progress)));
                         alphaTarget = 0.92f + 0.08f * repel;
                     }
                     tileAnimations[index].scaleSpring.setTarget(scaleTarget);
@@ -961,6 +1022,14 @@ int main() {
                 const float backgroundDim = easeInOutCubic(appProgress);
 
                 glViewport(0, 0, framebufferWidth, framebufferHeight);
+                if (framebufferWidth > 0 && framebufferHeight > 0) {
+                    const float fitScale = std::min(static_cast<float>(framebufferWidth) / 480.0f, static_cast<float>(framebufferHeight) / 760.0f);
+                    const int viewWidth = std::max(1, static_cast<int>(std::round(480.0f * fitScale)));
+                    const int viewHeight = std::max(1, static_cast<int>(std::round(760.0f * fitScale)));
+                    const int offsetX = std::max(0, (framebufferWidth - viewWidth) / 2);
+                    const int offsetY = std::max(0, (framebufferHeight - viewHeight) / 2);
+                    glViewport(offsetX, offsetY, viewWidth, viewHeight);
+                }
                 drawer.setProjection(width, height);
                 drawHome(drawer, font, layout, width, height, selectedIndex, appProgress, introTime, tileAnimations);
 
