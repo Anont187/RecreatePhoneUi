@@ -218,6 +218,9 @@ CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 //Enable aggressive release optimizations for the target PC
 FIELDKIT_AGGRESSIVE_OPTIMIZATIONS:BOOL=ON
 
+//Download GLFW and FreeType when they are not installed
+FIELDKIT_FETCH_DEPENDENCIES:BOOL=ON
+
 //Path to a file.
 FREETYPE_INCLUDE_DIR_freetype2:PATH=/usr/include/freetype2
 

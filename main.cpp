@@ -111,6 +111,46 @@ float easeInOutCubic(float t) {
     return 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f;
 }
 
+struct Spring1D {
+    float stiffness = 300.0f;
+    float damping = 25.0f;
+    float mass = 1.0f;
+    float currentValue = 1.0f;
+    float targetValue = 1.0f;
+    float velocity = 0.0f;
+
+    void setTarget(float value) {
+        targetValue = value;
+    }
+
+    void applyTouchFlick(float externalVelocity) {
+        velocity = externalVelocity;
+    }
+
+    float update(float deltaTime) {
+        const float dt = std::min(deltaTime, 0.05f);
+        const float displacement = currentValue - targetValue;
+        const float springForce = -stiffness * displacement;
+        const float dampingForce = -damping * velocity;
+        const float acceleration = (springForce + dampingForce) / mass;
+
+        velocity += acceleration * dt;
+        currentValue += velocity * dt;
+
+        if (std::abs(targetValue - currentValue) < 0.0005f && std::abs(velocity) < 0.01f) {
+            currentValue = targetValue;
+            velocity = 0.0f;
+        }
+
+        return currentValue;
+    }
+};
+
+struct TileAnimationState {
+    Spring1D scaleSpring{350.0f, 26.0f, 1.0f};
+    Spring1D alphaSpring{200.0f, 20.0f, 1.0f};
+};
+
 bool contains(const Rect& rect, float x, float y) {
     return x >= rect.x && y >= rect.y && x <= rect.x + rect.width && y <= rect.y + rect.height;
 }
@@ -621,7 +661,7 @@ void drawIcon(Drawer& drawer, const App& app, std::size_t index, const Rect& rec
     }
 }
 
-void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float width, float height, int selectedIndex, float openProgress, float introTime) {
+void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float width, float height, int selectedIndex, float openProgress, float introTime, const std::array<TileAnimationState, 24>& tileAnimations) {
     const glm::vec4 white = rgba(0.95f, 0.95f, 0.97f, 1.0f);
     const glm::vec4 muted = rgba(0.65f, 0.67f, 0.70f, 1.0f);
     const glm::vec4 systemBlue = rgba(0.0f, 0.48f, 1.0f, 1.0f);
@@ -648,7 +688,9 @@ void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float
         const float delay = row * 0.028f + (column % 2) * 0.014f;
         const float entrance = clamp((introTime - delay) / 0.38f, 0.0f, 1.0f);
         const float easedEntrance = 1.0f - std::pow(1.0f - entrance, 3.0f);
-        const float iconScale = (0.78f + 0.22f * easedEntrance) * (1.0f - 0.08f * openProgress);
+        const float tileScale = tileAnimations[index].scaleSpring.currentValue;
+        const float tileAlpha = tileAnimations[index].alphaSpring.currentValue;
+        const float iconScale = tileScale * (0.78f + 0.22f * easedEntrance) * (1.0f - 0.08f * openProgress);
         const float iconWidth = cell.icon.width * iconScale;
         const float iconHeight = cell.icon.height * iconScale;
         const Rect iconRect{
@@ -657,7 +699,7 @@ void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float
             iconWidth,
             iconHeight,
         };
-        const float alpha = easedEntrance * homeAlpha;
+        const float alpha = easedEntrance * homeAlpha * tileAlpha;
         drawIcon(drawer, Apps[index], index, iconRect, alpha);
         const float labelSize = clamp(layout.rowHeight * 0.145f * scale, 8.0f, 13.0f);
         const glm::vec4 labelColor = static_cast<int>(index) == selectedIndex ? rgba(0.95f, 0.96f, 0.98f, alpha) : rgba(0.70f, 0.72f, 0.76f, alpha);
@@ -687,6 +729,11 @@ void drawHome(Drawer& drawer, const FontAtlas& font, const Layout& layout, float
         const Rect iconRect{source.x + (source.width - iconWidth) * 0.5f, source.y + (source.height - iconHeight) * 0.5f + dock.y - layout.dock.y, iconWidth, iconHeight};
         drawIcon(drawer, Apps[appIndex], appIndex, iconRect, dockAlpha);
     }
+
+    const float indicatorWidth = std::min(width * 0.22f, 108.0f * scale);
+    drawer.roundedRect(
+        {width * 0.5f - indicatorWidth * 0.5f, height - 12.0f * scale, indicatorWidth, 4.0f * scale},
+        rgba(0.95f, 0.95f, 0.97f, homeAlpha), 2.0f * scale);
 }
 
 Rect closeButtonRect(const Rect& surface) {
@@ -707,6 +754,10 @@ void drawAppSurface(Drawer& drawer, const FontAtlas& font, const Rect& surface, 
     drawer.roundedRect({surface.x + 3.0f, surface.y + 7.0f, surface.width, surface.height}, rgba(0.0f, 0.0f, 0.0f, 0.28f * progress), radius + 3.0f);
     drawer.roundedRect(surface, appBackground, radius);
     drawer.roundedRect({surface.x + 1.0f * scale, surface.y + 1.0f * scale, surface.width - 2.0f * scale, surface.height * 0.12f}, rgba(1.0f, 1.0f, 1.0f, 0.30f * contentAlpha), radius);
+    const float indicatorWidth = std::min(surface.width * 0.22f, 108.0f * scale);
+    drawer.roundedRect(
+        {surface.x + (surface.width - indicatorWidth) * 0.5f, surface.y + surface.height - 12.0f * scale, indicatorWidth, 4.0f * scale},
+        rgba(0.10f, 0.10f, 0.11f, contentAlpha), 2.0f * scale);
     const float iconMorphAlpha = 1.0f - easeInOutCubic(clamp(progress / 0.58f, 0.0f, 1.0f));
     if (iconMorphAlpha > 0.0f) {
         drawIcon(drawer, app, index, surface, iconMorphAlpha);
@@ -802,13 +853,14 @@ int main() {
             int selectedIndex = 0;
             int selectedDockSlot = -1;
             float progress = 0.0f;
-            float velocity = 0.0f;
             float target = 0.0f;
             float introTime = 0.0f;
             bool wasMouseDown = false;
             bool wasEscapeDown = false;
             bool wasEnterDown = false;
             bool wasSpaceDown = false;
+            Spring1D appSpring{};
+            std::array<TileAnimationState, 24> tileAnimations{};
             double previousTime = glfwGetTime();
 
             while (glfwWindowShouldClose(window) == GLFW_FALSE) {
@@ -878,25 +930,39 @@ int main() {
                 wasEnterDown = enterDown;
                 wasSpaceDown = spaceDown;
 
-                float remainingTime = deltaTime;
-                while (remainingTime > 0.0f) {
-                    const float step = std::min(remainingTime, 1.0f / 120.0f);
-                    const float acceleration = (target - progress) * 230.0f - velocity * 29.0f;
-                    velocity += acceleration * step;
-                    progress = clamp(progress + velocity * step, 0.0f, 1.04f);
-                    remainingTime -= step;
+                const int selectedCol = selectedIndex % 4;
+                const int selectedRow = selectedIndex / 4;
+                for (std::size_t index = 0; index < tileAnimations.size(); ++index) {
+                    const int row = static_cast<int>(index / 4);
+                    const int col = static_cast<int>(index % 4);
+                    const float dx = static_cast<float>(col - selectedCol);
+                    const float dy = static_cast<float>(row - selectedRow);
+                    const float distance = std::sqrt(dx * dx + dy * dy) + 0.5f;
+                    const float repel = target > 0.5f ? std::max(0.0f, 1.6f - distance) : 0.0f;
+                    float scaleTarget = 1.0f;
+                    float alphaTarget = 1.0f;
+                    if (static_cast<int>(index) == selectedIndex && target > 0.5f) {
+                        scaleTarget = 1.20f;
+                        alphaTarget = 1.0f;
+                    } else if (target > 0.5f) {
+                        scaleTarget = 1.0f + 0.12f * repel * (1.0f - std::min(1.0f, std::max(0.0f, progress)));
+                        alphaTarget = 0.92f + 0.08f * repel;
+                    }
+                    tileAnimations[index].scaleSpring.setTarget(scaleTarget);
+                    tileAnimations[index].alphaSpring.setTarget(alphaTarget);
+                    tileAnimations[index].scaleSpring.update(deltaTime);
+                    tileAnimations[index].alphaSpring.update(deltaTime);
                 }
-                if (std::abs(target - progress) < 0.001f && std::abs(velocity) < 0.02f) {
-                    progress = target;
-                    velocity = 0.0f;
-                }
+
+                appSpring.setTarget(target);
+                progress = clamp(appSpring.update(deltaTime), 0.0f, 1.04f);
 
                 const float appProgress = clamp(progress, 0.0f, 1.0f);
                 const float backgroundDim = easeInOutCubic(appProgress);
 
                 glViewport(0, 0, framebufferWidth, framebufferHeight);
                 drawer.setProjection(width, height);
-                drawHome(drawer, font, layout, width, height, selectedIndex, appProgress, introTime);
+                drawHome(drawer, font, layout, width, height, selectedIndex, appProgress, introTime, tileAnimations);
 
                 if (progress > 0.001f) {
                     drawer.roundedRect({0.0f, 0.0f, width, height}, rgba(0.0f, 0.0f, 0.0f, 0.78f * backgroundDim), 0.0f);
